@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict
 
 app = FastAPI()
 
 # In-memory database
-items_db = {}
+items_db: Dict[str, "Item"] = {}
 
 # Pydantic model for an item
 class Item(BaseModel):
@@ -42,10 +42,18 @@ def create_item(item: Item):
     return {"message": "Item created", "item": item}
 
 
-# Get all items
+# Get all items (supports optional filtering)
 @app.get("/items/")
-def get_all_items():
-    return items_db
+def get_all_items(q: Optional[str] = None, price: Optional[float] = None):
+    results = {}
+    for name, item in items_db.items():
+        # Filter logic
+        if q and q.lower() not in name.lower():
+            continue
+        if price and item.price != price:
+            continue
+        results[name] = item
+    return results
 
 
 # Get single item by name
