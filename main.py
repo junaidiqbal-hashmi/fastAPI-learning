@@ -1,7 +1,10 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, HTTPException, Path, Query, Depends, status
+from pydantic import BaseModel
+from typing import Optional, List
+from models import Item
 from sqlalchemy.orm import Session
 import models, schemas
-from database import engine, SessionLocal
+from database import engine, SessionLocal, Base
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
