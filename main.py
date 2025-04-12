@@ -1,83 +1,72 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import Optional, Dict
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+import models, schemas
+from database import engine, SessionLocal
+
+# Create database tables
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# In-memory database
-items_db: Dict[str, "Item"] = {}
-
-# Pydantic model for an item
-class Item(BaseModel):
-    name: str
-    price: float
-    is_offer: Optional[bool] = None
-
-# ******Root route******
-# @app.get("/")
-# def read_root():
-#     return {"message": "Hello, FastAPI!"}
-
-# *******GET endpoint with path + query*********
-# @app.get("/items/{item_id}")
-# def read_item(item_id: int, q: str = None):
-#     return {"item_id": item_id, "query": q}
-
-# ********POST endpoint to receive an Item*********
-# @app.post("/items/")
-# def create_item(item: Item):
-#     return {
-#         "name": item.name,
-#         "price": item.price,
-#         "is_offer": item.is_offer
-#     }
+# Dependency: get db session for each request
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 # Create item
-@app.post("/items/")
-def create_item(item: Item):
-    if item.name in items_db:
-        return {"error": "Item already exists"}
-    items_db[item.name] = item
-    return {"message": "Item created", "item": item}
+@app.post("/items/", response_model=schemas.ItemResponse)
+def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
+    existing_item = db.query(models.Item).filter(models.Item.name == item.name).first()
+    if existing_item:
+        raise HTTPException(status_code=400, detail="Item already exists")
+    db_item = models.Item(**item.model_dump())
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
 
 
-# Get all items (supports optional filtering)
-@app.get("/items/")
-def get_all_items(q: Optional[str] = None, price: Optional[float] = None):
-    results = {}
-    for name, item in items_db.items():
-        # Filter logic
-        if q and q.lower() not in name.lower():
-            continue
-        if price and item.price != price:
-            continue
-        results[name] = item
-    return results
+# Get all items (with optional query filter)
+@app.get("/items/", response_model=list[schemas.ItemResponse])
+def get_all_items(q: str = None, db: Session = Depends(get_db)):
+    query = db.query(models.Item)
+    if q:
+        query = query.filter(models.Item.name.contains(q))
+    return query.all()
 
 
-# Get single item by name
-@app.get("/items/{name}")
-def get_item(name: str):
-    item = items_db.get(name)
-    if item:
-        return item
-    return {"error": "Item not found"}
+# Get item by ID
+@app.get("/items/{item_id}", response_model=schemas.ItemResponse)
+def get_item(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
 
 
 # Update item
-@app.put("/items/{name}")
-def update_item(name: str, updated_item: Item):
-    if name not in items_db:
-        return {"error": "Item not found"}
-    items_db[name] = updated_item
-    return {"message": "Item updated", "item": updated_item}
+@app.put("/items/{item_id}", response_model=schemas.ItemResponse)
+def update_item(item_id: int, updated_data: schemas.ItemCreate, db: Session = Depends(get_db)):
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    for key, value in updated_data.model_dump().items():
+        setattr(item, key, value)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 # Delete item
-@app.delete("/items/{name}")
-def delete_item(name: str):
-    if name in items_db:
-        del items_db[name]
-        return {"message": f"Item '{name}' deleted"}
-    return {"error": "Item not found"}
+@app.delete("/items/{item_id}")
+def delete_item(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    db.delete(item)
+    db.commit()
+    return {"message": f"Item with ID {item_id} deleted"}
