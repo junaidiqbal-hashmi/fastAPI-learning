@@ -5,11 +5,18 @@ from models import Item
 from sqlalchemy.orm import Session
 import models, schemas
 from database import engine, SessionLocal, Base
+from enum import Enum
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+# Category Enum
+class CategoryEnum(str, Enum):
+    books = "books"
+    electronics = "electronics"
+    clothing = "clothing"
 
 # Dependency: get db session for each request
 def get_db():
@@ -65,6 +72,15 @@ def get_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")  # Proper 404
     return item
+
+
+# Get items by category using Enum
+@app.get("/items/category/{category_name}", response_model=list[schemas.ItemResponse])
+def get_items_by_category(category_name: CategoryEnum, db: Session = Depends(get_db)):
+    items = db.query(models.Item).filter(models.Item.category == category_name.value).all()
+    if not items:
+        raise HTTPException(status_code=404, detail="No items found in this category")
+    return items
 
 
 # Update item with path validation + model_dump()
