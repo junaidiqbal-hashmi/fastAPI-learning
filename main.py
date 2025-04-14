@@ -53,12 +53,16 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
 # Get all items (with optional query filter)
 @app.get("/items/", response_model=list[schemas.ItemResponse])
 def get_all_items(
-    q: str = Query(default=None, min_length=3, max_length=50),  #  Query validation
+    q: str = Query(default=None, min_length=3, max_length=50),
+    category: str = Query(default=None),
+  #  Query validation
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Item)
     if q:
         query = query.filter(models.Item.name.contains(q))
+    if category:
+        query = query.filter(models.Item.category.ilike(f"%{category}%")) # case-insensitive match
     return query.all()
 
 
