@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from models import Item, Category
 import models, schemas
 from database import SessionLocal, engine
+from typing import List
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
