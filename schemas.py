@@ -5,7 +5,6 @@ class ItemBase(BaseModel):
     name: str
     price: float
     is_offer: Optional[bool] = None
-    category: str
     description: Optional[str] = None
     category: Optional[str] = None  # New
     rating: Optional[float] = None  # New
