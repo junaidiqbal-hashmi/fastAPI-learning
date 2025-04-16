@@ -7,6 +7,10 @@ class ItemBase(BaseModel):
     is_offer: Optional[bool] = None
     category: str
     description: Optional[str] = None
+    category: Optional[str] = None  # New
+    rating: Optional[float] = None  # New
+    tags: Optional[str] = None  # New
+    stock_quantity: Optional[int] = None  # New
 
 class ItemCreate(ItemBase):
     pass
