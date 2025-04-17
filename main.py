@@ -58,9 +58,19 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
 
 # Get all items
 @app.get("/items/", response_model=List[schemas.ItemResponse])
-def get_items(db: Session = Depends(get_db)):
-    items = db.query(models.Item).all()
-    return items
+def get_items(
+    category: str = Query(None),  # Added optional category filter
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.Item)
+
+    if category:
+        category_obj = db.query(models.Category).filter(models.Category.name == category).first()
+        if not category_obj:
+            raise HTTPException(status_code=404, detail="Category not found")
+        query = query.filter(models.Item.category_id == category_obj.id)
+
+    return query.all()
 
 # Get item by ID
 @app.get("/items/{item_id}", response_model=schemas.ItemResponse)
