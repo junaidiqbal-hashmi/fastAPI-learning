@@ -50,7 +50,7 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
     db_item = db.query(models.Item).filter(models.Item.name == item.name).first()
     if db_item:
         raise HTTPException(status_code=400, detail="Item already exists")
-    new_item = models.Item(**item.dict())
+    new_item = models.Item(**item.model_dump())
     db.add(new_item)
     db.commit()
     db.refresh(new_item)
