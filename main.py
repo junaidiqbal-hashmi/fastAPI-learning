@@ -88,3 +88,50 @@ def get_items_by_category(category_name: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Category not found")
     items = db.query(models.Item).filter(models.Item.category_id == category.id).all()
     return items
+
+
+# Update an item by ID
+@app.put("/items/{item_id}", response_model=schemas.ItemResponse)
+def update_item(item_id: int, item: schemas.ItemCreate, db: Session = Depends(get_db)):
+    db_item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    for key, value in item.model_dump().items():
+        setattr(db_item, key, value)
+
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+# Delete an item by ID
+@app.delete("/items/{item_id}", status_code=204)
+def delete_item(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    db.delete(item)
+    db.commit()
+    return
+
+# Update a category by ID
+@app.put("/categories/{category_id}", response_model=schemas.CategoryResponse)
+def update_category(category_id: int, category: schemas.CategoryCreate, db: Session = Depends(get_db)):
+    db_category = db.query(models.Category).filter(models.Category.id == category_id).first()
+    if not db_category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    db_category.name = category.name
+    db.commit()
+    db.refresh(db_category)
+    return db_category
+
+# Delete a category by ID
+@app.delete("/categories/{category_id}", status_code=204)
+def delete_category(category_id: int, db: Session = Depends(get_db)):
+    category = db.query(models.Category).filter(models.Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    db.delete(category)
+    db.commit()
+    return
