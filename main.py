@@ -1,4 +1,3 @@
-# main.py
 from fastapi import FastAPI, HTTPException, Path, Query, Depends, status
 from sqlalchemy.orm import Session
 from models import Item, Category, User
@@ -7,11 +6,37 @@ from database import SessionLocal, engine
 from typing import List
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from fastapi.security import OAuth2PasswordBearer
+from fastapi.openapi.utils import get_openapi
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+# Override OpenAPI schema for simpler Swagger UI
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    openapi_schema = get_openapi(
+        title="Your API",
+        version="1.0.0",
+        description="Simplified JWT auth using OAuth2 password flow",
+        routes=app.routes,
+    )
+    openapi_schema["components"]["securitySchemes"] = {
+        "OAuth2PasswordBearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
+    }
+    for path in openapi_schema["paths"].values():
+        for method in path.values():
+            method["security"] = [{"OAuth2PasswordBearer": []}]
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # Dependency: get db session for each request
 def get_db():
@@ -24,42 +49,33 @@ def get_db():
 # OAuth2PasswordBearer is used to extract the token from the Authorization header
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/login")
 
-# User Registration (POST /users/register/)
+# User Registration
 @app.post("/users/register/", response_model=schemas.UserResponse)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    # Check if the user already exists
-    db_user = db.query(User).filter(User.username == user.username).first()
-    if db_user:
+    if db.query(User).filter(User.username == user.username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
-    
-    db_user = db.query(User).filter(User.email == user.email).first()
-    if db_user:
+    if db.query(User).filter(User.email == user.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Hash the password and create the user
     hashed_password = hash_password(user.password)
     new_user = User(username=user.username, email=user.email, hashed_password=hashed_password)
-    
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    
     return new_user
 
-# User Login (POST /users/login/)
+# User Login
 @app.post("/users/login/", response_model=schemas.Token)
 def login_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.username == user.username).first()
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    # Create JWT token
     access_token = create_access_token(data={"sub": db_user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
-# Dependency to get the current user from the JWT token
+# Dependency to get current user
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    # Decode JWT token
     token_data = decode_access_token(token)
     if not token_data:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -69,15 +85,10 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-# Create a new category
+# Protected: Create category
 @app.post("/categories/", response_model=schemas.CategoryResponse)
-def create_category(
-    category: schemas.CategoryCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    db_category = db.query(models.Category).filter(models.Category.name == category.name).first()
-    if db_category:
+def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if db.query(models.Category).filter(models.Category.name == category.name).first():
         raise HTTPException(status_code=400, detail="Category already exists")
     new_category = models.Category(name=category.name)
     db.add(new_category)
@@ -85,35 +96,23 @@ def create_category(
     db.refresh(new_category)
     return new_category
 
-# Get all categories
+# Protected: Get all categories
 @app.get("/categories/", response_model=List[schemas.CategoryResponse])
-def get_categories(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def get_categories(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(models.Category).all()
 
-# Get a category by ID
+# Protected: Get a category
 @app.get("/categories/{category_id}", response_model=schemas.CategoryResponse)
-def get_category(
-    category_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def get_category(category_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     category = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     return category
 
-# Create a new item
+# Protected: Create item
 @app.post("/items/", response_model=schemas.ItemResponse)
-def create_item(
-    item: schemas.ItemCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    db_item = db.query(models.Item).filter(models.Item.name == item.name).first()
-    if db_item:
+def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if db.query(models.Item).filter(models.Item.name == item.name).first():
         raise HTTPException(status_code=400, detail="Item already exists")
     new_item = models.Item(**item.model_dump())
     db.add(new_item)
@@ -121,13 +120,9 @@ def create_item(
     db.refresh(new_item)
     return new_item
 
-# Get all items
+# Protected: Get all items
 @app.get("/items/", response_model=List[schemas.ItemResponse])
-def get_items(
-    category: str = Query(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def get_items(category: str = Query(None), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     query = db.query(models.Item)
     if category:
         category_obj = db.query(models.Category).filter(models.Category.name == category).first()
@@ -136,38 +131,25 @@ def get_items(
         query = query.filter(models.Item.category_id == category_obj.id)
     return query.all()
 
-# Get item by ID
+# Protected: Get item by ID
 @app.get("/items/{item_id}", response_model=schemas.ItemResponse)
-def get_item(
-    item_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def get_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     return item
 
-# Get items by category
+# Protected: Get items by category
 @app.get("/items/category/{category_name}", response_model=List[schemas.ItemResponse])
-def get_items_by_category(
-    category_name: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def get_items_by_category(category_name: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     category = db.query(models.Category).filter(models.Category.name == category_name).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     return db.query(models.Item).filter(models.Item.category_id == category.id).all()
 
-# Update an item by ID
+# Protected: Update item
 @app.put("/items/{item_id}", response_model=schemas.ItemResponse)
-def update_item(
-    item_id: int,
-    item: schemas.ItemCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def update_item(item_id: int, item: schemas.ItemCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     db_item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -177,28 +159,18 @@ def update_item(
     db.refresh(db_item)
     return db_item
 
-# Delete an item by ID
+# Protected: Delete item
 @app.delete("/items/{item_id}", status_code=204)
-def delete_item(
-    item_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def delete_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     db.delete(item)
     db.commit()
-    return
 
-# Update a category by ID
+# Protected: Update category
 @app.put("/categories/{category_id}", response_model=schemas.CategoryResponse)
-def update_category(
-    category_id: int,
-    category: schemas.CategoryCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def update_category(category_id: int, category: schemas.CategoryCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     db_category = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not db_category:
         raise HTTPException(status_code=404, detail="Category not found")
@@ -207,16 +179,11 @@ def update_category(
     db.refresh(db_category)
     return db_category
 
-# Delete a category by ID
+# Protected: Delete category
 @app.delete("/categories/{category_id}", status_code=204)
-def delete_category(
-    category_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def delete_category(category_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     category = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     db.delete(category)
     db.commit()
-    return
