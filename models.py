@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
+from sqlalchemy import DateTime
+from datetime import datetime, timezone
 
 class Category(Base):
     __tablename__ = "categories"
@@ -26,3 +28,13 @@ class Item(Base):
     rating = Column(Float, nullable=True)
     tags = Column(String, nullable=True)
     stock_quantity = Column(Integer, default=0)
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc))
