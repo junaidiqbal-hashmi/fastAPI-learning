@@ -4,6 +4,7 @@ from models import Item, Category, User
 import models, schemas
 from database import SessionLocal, engine
 from typing import List
+from config import settings
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.openapi.utils import get_openapi
@@ -187,3 +188,12 @@ def delete_category(category_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=404, detail="Category not found")
     db.delete(category)
     db.commit()
+
+@app.get("/test-settings")
+def test_settings():
+    return {
+        "JWT_SECRET_KEY": settings.JWT_SECRET_KEY,
+        "ALGORITHM": settings.ALGORITHM,
+        "ACCESS_TOKEN_EXPIRE_MINUTES": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+        "DATABASE_URL": settings.DATABASE_URL,
+    }
