@@ -8,6 +8,8 @@ from config import settings
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.openapi.utils import get_openapi
+from fastapi import Query
+from sqlalchemy import func
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
@@ -98,14 +100,23 @@ def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_
     return new_category
 
 # Protected: Get all categories
-@app.get("/categories/", response_model=List[schemas.CategoryResponse])
+@app.get("/categories/", response_model=schemas.PaginatedResponse[schemas.CategoryResponse])
 def get_categories(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(10, le=100, description="Maximum number of records to return"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return db.query(models.Category).offset(skip).limit(limit).all()
+    query = db.query(models.Category)
+    total = query.count()
+    categories = query.offset(skip).limit(limit).all()
+    
+    return schemas.PaginatedResponse(
+        total=total,
+        skip=skip,
+        limit=limit,
+        data=categories
+    )
 
 
 # Protected: Get a category
@@ -130,24 +141,47 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
 # Protected: Get all items
 from fastapi import Query
 
-@app.get("/items/", response_model=List[schemas.ItemResponse])
+@app.get("/items/", response_model=schemas.PaginatedResponse[schemas.ItemResponse])
 def get_items(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(10, le=100, description="Maximum number of records to return"),
-    category: str = Query(None, description="Filter items by category name"),
+    category: str = Query(None, description="Filter by category name"),
+    name: str = Query(None, description="Search items by name"),
+    min_price: float = Query(None, description="Minimum price"),
+    max_price: float = Query(None, description="Maximum price"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     query = db.query(models.Item)
-    
+
+    # Filtering by category
     if category:
         category_obj = db.query(models.Category).filter(models.Category.name == category).first()
         if not category_obj:
             raise HTTPException(status_code=404, detail="Category not found")
         query = query.filter(models.Item.category_id == category_obj.id)
-    
-    return query.offset(skip).limit(limit).all()
 
+    # Filtering by item name (case-insensitive search)
+    if name:
+        query = query.filter(models.Item.name.ilike(f"%{name}%"))
+
+    # Filtering by minimum price
+    if min_price is not None:
+        query = query.filter(models.Item.price >= min_price)
+
+    # Filtering by maximum price
+    if max_price is not None:
+        query = query.filter(models.Item.price <= max_price)
+
+    total = query.count()
+    items = query.offset(skip).limit(limit).all()
+
+    return schemas.PaginatedResponse(
+        total=total,
+        skip=skip,
+        limit=limit,
+        data=items
+    )
 
 
 # Protected: Get item by ID

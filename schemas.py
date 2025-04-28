@@ -70,3 +70,19 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+
+
+# ---------------------------------------------------------
+# Pagination schema (add this at the end of schemas.py)
+# ---------------------------------------------------------
+from typing import Generic, TypeVar, List
+from pydantic.generics import GenericModel
+
+T = TypeVar("T")
+
+class PaginatedResponse(GenericModel, Generic[T]):
+    total: int
+    skip: int
+    limit: int
+    data: List[T]
+
