@@ -99,8 +99,14 @@ def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_
 
 # Protected: Get all categories
 @app.get("/categories/", response_model=List[schemas.CategoryResponse])
-def get_categories(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(models.Category).all()
+def get_categories(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(10, le=100, description="Maximum number of records to return"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return db.query(models.Category).offset(skip).limit(limit).all()
+
 
 # Protected: Get a category
 @app.get("/categories/{category_id}", response_model=schemas.CategoryResponse)
@@ -122,15 +128,27 @@ def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db), current
     return new_item
 
 # Protected: Get all items
+from fastapi import Query
+
 @app.get("/items/", response_model=List[schemas.ItemResponse])
-def get_items(category: str = Query(None), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_items(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(10, le=100, description="Maximum number of records to return"),
+    category: str = Query(None, description="Filter items by category name"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     query = db.query(models.Item)
+    
     if category:
         category_obj = db.query(models.Category).filter(models.Category.name == category).first()
         if not category_obj:
             raise HTTPException(status_code=404, detail="Category not found")
         query = query.filter(models.Item.category_id == category_obj.id)
-    return query.all()
+    
+    return query.offset(skip).limit(limit).all()
+
+
 
 # Protected: Get item by ID
 @app.get("/items/{item_id}", response_model=schemas.ItemResponse)
